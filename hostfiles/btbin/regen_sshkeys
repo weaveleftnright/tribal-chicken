@@ -1,0 +1,13 @@
+#!/bin/bash
+if [ -e /etc/ssh/ssh_host_rsa_key ]
+then
+	rm /etc/ssh/ssh_host_rsa_key*
+fi
+
+if [ -e /etc/ssh/ssh_host_dsa_key ]
+then
+	rm /etc/ssh/ssh_host_dsa_key*
+fi
+
+ssh-keygen -t rsa -q -f /etc/ssh/ssh_host_rsa_key -N ""
+ssh-keygen -t dsa -q -f /etc/ssh/ssh_host_dsa_key -N ""

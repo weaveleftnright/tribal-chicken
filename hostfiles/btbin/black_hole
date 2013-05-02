@@ -1,0 +1,108 @@
+#!/bin/bash
+# *********************************************************
+# Author: Spiky
+# Last Modified: April 2012
+# This script appends the black hole list to /etc/hosts
+# http://winhelp2002.mvps.org/hosts.htm for ref
+# Normally run when on the internet 
+# *********************************************************
+
+# START Variable Block
+BLACK_HOLE_DIR=/root/bin/.black_hole
+BLACK_HOLE_FILE=$BLACK_HOLE_DIR/hosts.txt
+LOCAL_HOST_BACKUP=$BLACK_HOLE_DIR/hosts.local
+# END Variable Block
+
+# ********************************************************
+# Quick function to attempt restore
+# ********************************************************
+function restore_bak()
+{
+  if [ -e hosts.local ]
+  then
+    if mv hosts.local /etc/hosts
+    then
+      echo Backup hosts file restored.
+      return 0
+    else
+      echo There was a problem restoring the old file.
+      return 1
+    fi  # if mv (test file rename)
+  else
+    echo Backup hosts file not found!
+    return 1
+  fi  # if hosts.bak
+}
+# ********************************************************
+
+
+# ********************************************************
+# Block for setting up/testing environ
+# ********************************************************
+# Set up to run (change dir, check temp file, etc)
+  echo Preparing environment...
+# Make sure the directory is there
+  if [ ! -d "$BLACK_HOLE_DIR" ]
+  then 
+    echo The directory: $BLACK_HOLE_DIR  not found.
+    echo Try running: update_hosts
+    echo Aborting...
+    exit
+  fi
+# Make sure the hosts.txt file is there
+  if [ ! -e "$BLACK_HOLE_FILE" ]
+  then 
+    echo The file: $BLACK_HOLE_FILE  not found.
+    echo Try running: update_hosts
+    echo Aborting...
+    exit
+  fi
+# Change to destination dir
+  pushd "$BLACK_HOLE_DIR" > /dev/null
+# Store current hosts file in case of errors/mismatches
+  if [ -e /etc/hosts ] && [ ! -e $LOCAL_HOST_BACKUP ]
+  then
+    echo Saving current hosts files as: $LOCAL_HOST_BACKUP
+    cp /etc/hosts $LOCAL_HOST_BACKUP
+  fi  #if hosts
+
+# ********************************************************
+# Main code block
+# ********************************************************
+# Check if restore
+  if [ $# -eq 0 ]
+  then
+  # Append black hole list to /etc/hosts
+    echo "Attempting to add black hole host list..."
+    cat $BLACK_HOLE_FILE >> /etc/hosts
+  else
+    if [ "$1" = "undo" ] || [ "$1" = "-u" ]
+    then
+      echo Restoring $LOCAL_HOST_BACKUP to /etc/hosts
+      cp $LOCAL_HOST_BACKUP /etc/hosts
+    else
+      echo "Usage:  $0 "'[undo|-u]'
+    fi
+  fi
+
+# ********************************************************
+# Block for tear down/clean up of environ
+# ********************************************************
+  echo Cleaning up...
+
+# Cleanup temp files
+  FILE_LIST=
+  for name in ""
+  do
+    if [ -e $name ]
+    then
+      rm -f $name
+    fi
+  done
+
+# return to destination dir
+  popd > /dev/null
+  echo Finished.
+
+exit
+

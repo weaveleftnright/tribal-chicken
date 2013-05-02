@@ -1,0 +1,124 @@
+#!/bin/bash
+#Define variables
+LIST_OF_MACS=/root/bin/newmac.list	        #fix for locale...
+LIBRARY_FUNCTIONS=/root/bin/newmac_functions    #fix for locale...
+LOCAL_MAC_FILE=/root/bin/mac.local	        #fix for locale...
+ADD_MAC_FLAG="ADD_Current_MAC"
+
+# Check library functions
+if [ -s "$LIBRARY_FUNCTIONS" ]
+then
+# Source command pulls in library functions
+  source "$LIBRARY_FUNCTIONS"
+else
+# Couldn't find library error/exit
+  echo Unable to locate required library file: $LIBRARY_FUNCTIONS >&2
+  echo Exiting. >&2
+  exit
+fi  # if Library
+
+#Check for interface input
+if [ -z "$1" ]
+then
+# No parameter, default to eth0
+  DEFAULT_INTERFACE=eth0
+else
+# sent an interface in
+  if [ "$1" = "-d" ] 
+  then
+  # requests determiniation via default route
+    echo Determining default routes... 
+    DEF_IFACE="`route | awk '/default/ { print $8 }'`"
+    if [ ! -z $DEF_IFACE ]
+    then 
+      DEFAULT_INTERFACE=$DEF_IFACE
+    else
+    # no default route found, default to eth0
+      DEFAULT_INTERFACE=eth0
+    fi
+  else
+  # simply submitted an interface.  Strip input
+    DEFAULT_INTERFACE=$( strip_read_value "$1" )
+  fi
+fi
+
+# Ensure tests against $LIST_OF_MACS don't fail
+  if [ ! -f $LIST_OF_MACS ]
+  then
+    # create an empty one
+    > $LIST_OF_MACS
+  fi
+
+# Configure some more Variables
+CURRENT_MAC="`/sbin/ifconfig | /bin/grep "$DEFAULT_INTERFACE" | awk '/HW/ { print $5 }'`"
+  if [ "$CURRENT_MAC" = `cat $LOCAL_MAC_FILE` ]
+  then
+	# Current is local, do not add reset option
+	OPTIONS="`cat $LIST_OF_MACS`"
+  else
+	# Current MAC is NOT the default, include reset option
+	OPTIONS="`cat $LOCAL_MAC_FILE` Reset_Local `cat $LIST_OF_MACS`"
+  fi
+# Add Save current to list if needed
+  IS_CURRENT_MAC_LISTED=`grep $CURRENT_MAC $LIST_OF_MACS`
+  if [ "$IS_CURRENT_MAC_LISTED" = "" ]
+  then
+	OPTIONS="$ADD_MAC_FLAG $CURRENT_MAC $OPTIONS"
+  fi
+  unset IS_CURRENT_MAC_LISTED
+
+# Generate dialog box with choices in OPTIONS, return $result
+  result=$(dialog --backtitle "CATPentu" --title "MAC Selection" --menu "Your current MAC for $DEFAULT_INTERFACE is: $CURRENT_MAC" 25 60 12 $OPTIONS 3>&1 1>&2 2>&3)
+
+# Test error from dialog, 0 is a choice, trap anything else.
+  case $? in
+  -1|1|255)
+	# User cancel request or hit esc
+	clear
+	echo No selection made/cancelled/user hit Esc
+	exit
+	;;
+  0)
+	# Valid selection has been made
+	clear
+	# Check if ADDing new
+	if [ "$result" = "$ADD_MAC_FLAG" ]
+	then
+	    # Request descriptor and add MAC (Validation done in add func)
+	    echo you wish to add $CURRENT_MAC to the list.		
+	    if ( add_mac_to_list "$CURRENT_MAC" )
+	    then
+		# Add succeeded
+		echo Successfully added $CURRENT_MAC to the list.
+	    else
+		# Add failed should be more status msgs from add function
+		echo Unable to add $CURRENT_MAC to the list.
+	    fi
+	    # Exit at this point, since this is current address and it was added or not
+	    exit
+	# Not adding a new one
+	else
+	    # Validate MAC then add it
+	    if ( validate_mac "$result" )
+	    then
+		# MAC passed validation, now set it
+		echo Changing MAC for $DEFAULT_INTERFACE to new value of $result.
+		/sbin/ifconfig $DEFAULT_INTERFACE hw ether $result
+	    else # IF validate_mac
+		# MAC did not pass validation
+		echo $result did not pass MAC validation.
+		exit
+	    fi # IF validate_mac
+	fi # IF result = Add
+	;;
+  *)
+	# Generic trap for unhandled error
+	clear
+	echo Something went wrong with the menu.  Not sure how we got here.
+	echo Errorno was $?
+	echo Result was $result
+	exit
+	;;
+  esac
+
+exit
