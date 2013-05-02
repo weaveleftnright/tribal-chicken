@@ -1,0 +1,21 @@
+#!/bin/sh -e
+### BEGIN INIT INFO
+# Provides:          mac.local
+# Required-Start:    $network
+# Required-Stop:     $local_fs
+# Default-Start:
+# Default-Stop:      0 6
+# Short-Description: Set mac.local data
+### END INIT INFO
+
+case "$1" in
+  start) 
+	if [ ! -s /root/bin/mac.local ]
+	then
+	  new_mac=`/bin/dmesg | /bin/grep eth0 | /bin/egrep -o '(..:){5}..'`
+	  echo $new_mac > /root/bin/mac.local
+	fi
+	;;
+  stop|restart|force-reload) exit 0 ;;
+  *) echo "Usage: $0 {start|stop|restart|force-reload}" >&2; exit 1 ;;
+esac

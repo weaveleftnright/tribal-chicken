@@ -1,0 +1,35 @@
+#!/bin/bash
+echo Mounting proc and sys
+  mount -t proc none /proc
+  mount -t sysfs none /sys
+
+echo Cleaning APT archives
+  apt-get clean
+
+echo Clearing MAC info
+
+  #To ensure getmac and other MAC based scripts run for each system
+  if [ -s /root/bin/mac.local ]
+  then
+    rm -f /root/bin/mac.local
+  fi
+
+echo Removing local host info
+  # check for lhost
+    if [ -d /root/lhost ]
+    then
+      rm -rf /root/lhost
+    fi
+
+echo Clearing browser cache files
+
+  #Firefox
+    rm -rf /root/.mozilla/firefox/*.default/Cache
+    rm -rf /root/.mozilla/firefox/*.default/places.sqlite
+
+  #Google-Chrome
+    rm -rf /root/.cache/google-chrome/Default/*
+
+echo Unmounting proc and sys and exiting
+  umount -f /proc
+  umount -f /sys

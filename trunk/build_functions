@@ -1,0 +1,338 @@
+#!/bin/bash
+
+# ****************************************************
+# clean_read_value ()
+# Usage: 
+# echo -n Enter test string:\>
+# read read_value
+# echo  $(clean_read_value "$read_value")
+# ****************************************************
+clean_read_value ()
+{
+if [ ! $# -eq 0 ]
+then
+	local pattern=" "
+	local RTN_VAL=`echo ${1##$pattern}`
+	local RTN_VAL=`echo ${RTN_VAL%%$pattern}`
+	local RTN_VAL=`echo ${RTN_VAL// /_}`
+	echo ${RTN_VAL}
+	return 0
+fi
+
+}
+# ****************************************************
+
+
+# ****************************************************
+# build_iso ()
+# Usage: 
+# if  ( build_iso )
+# ****************************************************
+
+# ****************************************************
+
+
+# ****************************************************
+# build_interactive ()
+# Usage: 
+# if  ( build_interactive )
+# ****************************************************
+
+# ****************************************************
+
+
+# ****************************************************
+# validate_env ()
+# This function checks for the existence of required files/folders/utilities
+# Usage: 
+# if  ( validate_env )
+# return 0 for success
+# ****************************************************
+#Check to make sure our required directories are present
+validate_env ()
+{
+if [ ! -d $CURRENT_BUILD_BASE/hostfiles ] || [ ! -d $CURRENT_DVD_BASE ] || [ ! -d $CURRENT_DVD_BASE/$FS_LOCATION ]
+then
+  echo Some directories appear to be missing.'\n'
+  echo Make sure hostfiles and $CURRENT_DVD_BASE exist and have the appropriate files.
+  return 1
+else
+  # Check for required hostfiles/scripts
+  if [ -s hostfiles.lst ]
+  then
+    for CHECKFILE in `cat hostfiles.lst`
+    do
+      if [ ! -e hostfiles/$CHECKFILE ]
+      then
+	echo $CURRENT_BUILD_BASE/hostfiles/$CHECKFILE appears to be missing.'\n'
+	echo Check the hostfiles directory for other missing files.
+	return 2
+      fi
+    done
+  fi  # if hostfiles
+  # Check for required utilities
+  if [ -s utils.lst ]
+  then
+    for CHECKFILE in `cat utils.lst`
+    do
+      if [ "`which $CHECKFILE`" = "" ]
+      then
+	echo The $CHECKFILE utility appears not to be installed.'\n'
+	echo Ensure the following utilities are loaded:
+	cat utils.lst
+	echo "   "
+	return 3
+      fi
+    done
+  fi  # if utilities
+fi  # if directories
+
+# If we got here, then we encountered no errors
+return 0
+}
+# ****************************************************
+
+
+# ****************************************************
+# make_img ()
+# Usage: 
+# echo $(make_img)
+# NOTE: Recommend returning results into dialog msgbox
+# ****************************************************
+make_img ()
+{
+if [ ! `echo $CURRENT_DEFAULT_ISO_NAME|grep .iso$` ]
+then
+   # No .iso extension found.  Adding .iso
+   CURRENT_DEFAULT_ISO_NAME=$CURRENT_DEFAULT_ISO_NAME.iso
+fi
+
+# Using $VERSIONTEXT in README.diskdefines
+VERSIONTEXT="#define DISKNAME Tribal Chicken (BT5/Kali) base version $CURRENT_DEFAULT_VERSION"
+echo $VERSIONTEXT > $CURRENT_DVD_BASE/README.diskdefines
+
+# Creating $ROOTFILENAME from $SRCPARTITION... this may take a while
+local info_box_msg=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	  "Creating disk image of $CURRENT_SRC_PARTITION in file $CURRENT_ROOT_FILENAME\
+	  \n\nThis may take a while." \
+	   10 65 3>&1 1>&2 2>&3 )
+
+# Remove comment from below line.
+dd if=$CURRENT_SRC_PARTITION of=$CURRENT_ROOT_FILENAME bs=64M
+# sleep 1	#REMOVE LINE
+echo "Imaging of $CURRENT_SRC_PARTITION is complete."
+return 0
+}
+# ****************************************************
+
+
+# ****************************************************
+# prepare_img ()
+# Usage: 
+# ( prepare_img )
+# ERR_NO = $?
+# case $ERR_NO in
+# There are fail conditions so using case to parse them
+# ****************************************************
+prepare_img ()
+{
+#Let's check to make sure there is a $ROOTFILENAME first:
+if [ -e $CURRENT_ROOT_FILENAME ]
+then 
+  # Disk image found, attempt to mount
+  if ( ! mount -o loop $CURRENT_ROOT_FILENAME /mnt )
+  then
+    # Could not mount the copy destination.  Exit with err 2
+    return 2
+  fi
+else
+  # Disk img file not found
+  return 1
+fi
+
+# Disk image is mounted, copy files over
+# Check for root/bin, make it if not there
+  if [ ! -d /mnt/root/bin ]
+  then
+    mkdir /mnt/root/bin
+  fi
+
+
+  cp $CURRENT_BUILD_BASE/hostfiles/defaultbash_history /mnt/root/.bash_history
+  cp $CURRENT_BUILD_BASE/hostfiles/bash_aliases /mnt/root/.bash_aliases
+  cp $CURRENT_BUILD_BASE/hostfiles/defaultfstab /mnt/etc/fstab
+  cp $CURRENT_BUILD_BASE/hostfiles/default.resolv.conf /mnt/etc/resolv.conf
+  cp $CURRENT_BUILD_BASE/hostfiles/cleanup /mnt/root
+  cp $CURRENT_BUILD_BASE/hostfiles/70-persistent-net.rules /mnt/etc/udev/rules.d/
+  cp -R $CURRENT_BUILD_BASE/hostfiles/btbin/* /mnt/root/bin/
+
+# Run the cleanup script inside the disk image
+  chmod +rx /mnt/root/cleanup
+  /usr/sbin/chroot /mnt /root/cleanup
+  sleep 5
+  rm /mnt/root/cleanup
+
+# Try to clear up the free space so squash can make the file system smaller.
+# Testing to see if this is the cause of the text conversion to binary...
+#  zerofree -v $CURRENT_ROOT_FILENAME
+# This apparently breaks the text files copied over earlier.
+# Disabled until a resolution can be found.
+
+# We will assume we got to this point with no unrecoverable errors.
+return 0
+}
+# ****************************************************
+
+
+# ****************************************************
+# prepare_ISO ()
+# Usage: 
+# ( prepare_ISO )
+# ERR_NO = $?
+# case $ERR_NO in
+# There are fail conditions so using case to parse them
+# Error conditions still need to be written		#REMOVE
+# ****************************************************
+prepare_ISO ()
+{
+# First save where we are and move into DVD working area
+  pushd $CURRENT_DVD_BASE
+
+#Determine filesystem.squashfs location
+#SET $FS_LOCATION Variable
+if [ -d $CURRENT_BUILD_BASE/$CURRENT_DVD_BASE/casper ] 
+   then 
+      FS_LOCATION=casper
+elif [ -d $CURRENT_BUILD_BASE/$CURRENT_DVD_BASE/live ]
+   then 
+      FS_LOCATION=live
+   else
+      echo "Error: Cannot determine where to put squashfs filesystems."
+fi
+
+# Create file manifests
+if [ -e $FS_LOCATION/filesystem.manifest ]
+then
+  chmod +w $FS_LOCATION/filesystem.manifest
+fi
+  /usr/sbin/chroot /mnt /usr/bin/dpkg-query -W --showformat='${Package} ${Version}\n' > $FS_LOCATION/filesystem.manifest
+  cp $FS_LOCATION/filesystem.manifest $FS_LOCATION/filesystem.manifest-desktop
+#  sed -i -e '/ubiquity/d' casper/filesystem.manifest-desktop
+
+# Build new squashfs filesystem
+if [ -e $FS_LOCATION/filesystem.squashfs ]
+then
+  rm $FS_LOCATION/filesyste*.squashfs
+fi
+
+  echo "Preparing squashed filesystems for live distro... this WILL take a while..."
+
+if [ $FS_LOCATION == "casper" ]
+  then
+    /usr/bin/mksquashfs /mnt $FS_LOCATION/filesystem.squashfs -e /mnt/opt -e /mnt/pentest
+    /usr/bin/mksquashfs /mnt $FS_LOCATION/filesystem2.squashfs -wildcards -e '!(opt)'
+    /usr/bin/mksquashfs /mnt $FS_LOCATION/filesystem3.squashfs -wildcards -e '!(pentest)'
+
+  elif [ $FS_LOCATION == "live" ]
+    then 
+    /usr/bin/mksquashfs /mnt $FS_LOCATION/filesystem.squashfs -e /mnt/opt
+    /usr/bin/mksquashfs /mnt $FS_LOCATION/filesystem2.squashfs -wildcards -e '!(opt)'
+
+  else
+    echo "Error: Cannot determine where to put squashfs filesystem."
+
+fi
+#Make squashfs directories executable
+chmod +x $FS_LOCATION/filesyste*.squashfs
+
+# Check for migrate flag
+# Add folder using squashfs
+  if [ "${CURRENT_MIGRATE_FLAG,,}" = "true" ]
+  then
+    if [ -e $FS_LOCATION/migrate.squashfs ]
+    then
+      rm $FS_LOCATION/migrate.squashfs
+    fi
+# Add migrate folder using squashfs "append"
+    /usr/bin/mksquashfs $CURRENT_MIGRATE_DIR $FS_LOCATION/filesystem.squashfs -keep-as-directory -no-recovery
+  fi
+
+
+# Cleanup mountings
+  umount /mnt
+
+# Regenerate md5sums
+  rm md5sum.txt
+  find . -type f -print0 | xargs -0 md5sum > md5sum.txt
+
+# Build new ISO...
+  /usr/bin/genisoimage -R -V "Tribal-Chicken" -cache-inodes -J -l -udf -allow-limited-size -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o $CURRENT_BUILD_BASE/$CURRENT_DEFAULT_ISO_NAME .
+
+#If BURN_TO_DISC flag set to true, burn ISO to disc. 
+#Default setting is false. Only executed if true. 
+if [ "${CURRENT_BURN_TO_DISC,,}" = "true" ]
+  then
+    echo "Preparing disc image for burning..."
+    #Check for ISO
+    if [ -e $CURRENT_BUILD_BASE/$CURRENT_DEFAULT_ISO_NAME ]
+      then
+        #Check size of ISO and prompt for disc.
+        DISC_SIZE=$(du -h $CURRENT_BUILD_BASE/$CURRENT_DVD_BASE |tail -n 1 |awk '{print $1}' |cut -d "G" -f 1)
+        USE_DISC=$(echo "$DISC_SIZE 4.3" |awk '{if ($1 >= $2) print "Bluray";else print "DVD"}')
+        eject $CURRENT_RECORDING_DEVICE
+        read -p "Current ISO build is "$DISC_SIZE"GB's. Please insert a blank \"$USE_DISC\" and press the [ENTER] key to continue..."
+          #Check for disc in drive
+          echo "Sleeping 30 seconds while drive loads disc."
+          sleep 30
+          if [ `udisks --show-info $CURRENT_RECORDING_DEVICE |grep -i 'has media:' |awk '{print $3}'` -eq 1 ]
+            then
+              echo "Burning image to disc."
+             /usr/bin/growisofs -overburn -Z $CURRENT_RECORDING_DEVICE=$CURRENT_BUILD_BASE/$CURRENT_DEFAULT_ISO_NAME
+              echo "ALL DONE!"
+            else
+              echo "Error: No disc detected. Aborting burn to disc."
+          fi
+      else
+        echo "Error: No ISO image found."
+    fi
+  else
+    echo "Skipping burn to disc. Use growisofs -overburn -Z "$CURRENT_RECORDING_DEVICE"="$CURRENT_BUILD_BASE/$CURRENT_DEFAULT_ISO_NAME
+fi
+
+# Return to where we started
+  popd
+}
+# ****************************************************
+
+
+# ****************************************************
+# archive_img ()
+# Usage: 
+# if  ( archive_img )
+# Currently only compressing.
+# Future release includes migration of image to a specified
+#  (separate?) partition
+# Future release will also specify compression flag
+# ****************************************************
+archive_img ()
+{
+if [ "${CURRENT_ARCHIVE_FLAG,,}" = "true" ]
+then
+  # Zip and archive the file.
+  if ( gzip $CURRENT_ROOT_FILENAME )
+  then
+    return 0
+  else
+    return 1
+  fi
+fi
+}
+# ****************************************************
+
+
+
+# ****************************************************
+# ****************************************************
+# ****************************************************
+# ****************************************************
+

@@ -1,0 +1,357 @@
+#!/bin/bash
+#**********************************************************
+# Name: Build Baseline Distribution Menu Script
+# Author: Spikygeek & Schlpr0k
+# Contact Info: schlpr0k@gmail.com
+# Last build date: May 2013
+#**********************************************************
+
+#**********************************************************
+# Let's check to make sure we've used sudo to get here:
+#**********************************************************
+if [ ! `id -u` -eq 0 ]
+then
+  echo "   "Sudo is required to use this script.
+  echo "   "Try re-running with \"sudo $0\"
+  exit
+fi
+
+#**********************************************************
+# Source command pulls in library functions and conf settings
+#**********************************************************
+if [ -s menu_functions ] 
+then
+	source menu_functions
+else
+	echo Unable to find required file: menu_functions
+	echo exiting...
+	exit
+fi
+if [ -s build_functions ] 
+then
+	source build_functions
+else
+	echo Unable to find required file: build_functions
+	echo exiting...
+	exit
+fi
+if [ -s build.conf ] 
+then
+	source build.conf
+else
+	echo Unable to find required file: build.conf
+	echo exiting...
+	exit
+fi
+
+#Adding sleep to see err msgs from sourcing
+sleep 1
+
+#**********************************************************
+# Build main menu list
+#**********************************************************
+if [ -s main_menu ] 
+then
+	OPTIONS="`grep -v ^# main_menu`"
+else
+	echo Unable to find required file: main_menu
+	echo exiting...
+	exit
+fi
+
+# Build first column of numbering.
+array[0]=1
+i=0
+for value in $OPTIONS
+do
+	array[i]="$((i/2+1))"
+	array[i+1]="$value"
+	((i+=2))
+done
+# Add in Exit/Quit option
+array[i]="Q"
+array[i+1]="Quit"
+
+
+#**********************************************************
+# Build config menu list and populate local vars
+#**********************************************************
+for CONF_OPT in `grep -v ^# build.conf | sed 's/\=.*$/\ /g'`
+do
+    CONFIG_OPTIONS="$CONFIG_OPTIONS $CONF_OPT ${!CONF_OPT}"
+    eval CURRENT_$CONF_OPT="${!CONF_OPT}"
+done
+CONFIG_OPTIONS="$CONFIG_OPTIONS Quit Return_to_Main"
+
+
+#**********************************************************
+# Generate the menu, grab the response, then parse the answer
+#**********************************************************
+MAIN_MENU_LOOP=true
+while $MAIN_MENU_LOOP
+do
+clear
+result=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Main Menu" --menu "Please choose an option:" 25 50 12 "${array[@]}" 3>&1 1>&2 2>&3)
+
+case $? in
+-1|1|255)
+	clear
+	#user cancel
+#	echo Errorno was $?
+	echo No selection made/cancelled/user hit Esc
+	MAIN_MENU_LOOP=false
+	exit
+	;;
+0)
+	clear
+	# Check for quit option first
+	if [ "$result" = "Q" ]
+	then
+	    echo User Quit.
+	    MAIN_MENU_LOOP=false
+	    exit
+	fi
+
+	# Determine the menu selection and launch subprocess.
+	idx=$((result*2-1))
+	MENU_CHOICE=${array[idx]}
+	;;
+*)
+	clear
+	echo Not sure how we got here.
+	echo Errorno was $?
+	echo Result was $result
+	exit
+	;;
+esac
+
+# We have the menu choice go from there (pull choices in from main_menu)
+#########################################################
+# This section should be merged with the next making it a combined DISPLAY/CHANGE config
+# This is to allow more graceful dealing with changes in the conf file
+#########################################################
+case $MENU_CHOICE in
+Change_Config)
+	# Load change menu that allows option to: change specific value, or return.
+
+	#**********************
+	# Generate the menu, grab the response, then parse the answer
+	CONFIG_MENU_LOOP=true
+	while $CONFIG_MENU_LOOP
+	do
+	#**********************************************************
+	# Rebuild config menu list (with current values)
+	#**********************************************************
+	CONFIG_OPTIONS=
+	for CONF_OPT in `grep -v ^# build.conf | sed 's/\=.*$/\ /g'`
+	do
+	    CONF_VAL=CURRENT_$CONF_OPT
+	    CONFIG_OPTIONS="$CONFIG_OPTIONS $CONF_OPT ${!CONF_VAL}"
+	done
+	CONFIG_OPTIONS="$CONFIG_OPTIONS Quit Return_to_Main"
+	clear
+
+	result=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Configuration Menu" \
+	--menu "Please choose an option:" 25 65 12 `echo $CONFIG_OPTIONS` 3>&1 1>&2 2>&3)
+
+	case $? in
+	-1|1|255)
+		clear
+		#user cancel
+		echo No selection made/cancelled/user hit Esc
+	        CONFIG_MENU_LOOP=false
+	        break
+		;;
+	0)
+		clear
+		# Check for quit option first
+		if [ "$result" = "Quit" ]
+		then
+		    clear
+		    CONFIG_MENU_LOOP=false
+		    break
+		fi
+		# Get current value
+		CURRENT_VALUE=CURRENT_$result
+		# Determine the menu selection and launch subprocess.
+		new_value=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Configure $result" --inputbox "Please enter new value[${!CURRENT_VALUE}]:" 25 50 ${!CURRENT_VALUE} 3>&1 1>&2 2>&3)
+		clear
+	    if [ ! "$new_value" = "" ]
+	    then
+		# Only modify value if a new value is entered
+		eval CURRENT_$result="$new_value"	#This needs to be an eval to parse the var on left
+		info_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Configure $result" --msgbox "$result is now = $new_value" 10 50 3>&1 1>&2 2>&3)
+	    fi
+		clear
+		echo Completed successfully
+		;;
+	*)
+		clear
+		echo Not sure how we got here.
+		echo Errorno was $?
+		echo Result was $result
+		exit
+		;;
+	esac
+
+
+	done	# while CONFIG_MENU_LOOP
+
+	;;
+
+Save_Config)
+	# This should be export to a separate file perhaps.
+	clear
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Save Config" --msgbox\
+	"This feature not yet implemented."\
+	 5 65 3>&1 1>&2 2>&3 )
+	;;
+Restore_Config)
+	# Reload defaults from .conf... remove this option until later.
+	clear
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Save Config" --msgbox\
+	"This feature not yet implemented."\
+	 5 65 3>&1 1>&2 2>&3 )
+	;;
+Backup_Partition)
+	# This will be implemented at a later date.
+	clear
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Save Config" --msgbox\
+	"This feature not yet implemented."\
+	 5 65 3>&1 1>&2 2>&3 )
+	;;
+Restore_Partition)
+	# This will be implemented at a later date.
+	clear
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Save Config" --msgbox\
+	"This feature not yet implemented."\
+	 5 65 3>&1 1>&2 2>&3 )
+	;;
+Build_ISO)
+	# The original build scripting goes here, modded to only accept .conf or passed values
+	# Calling it as a function and keep it in it's own file, sourced at top of file
+	# source file: build_functions
+	clear
+	if ( ! validate_env )
+	then
+		info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --msgbox\
+		"`echo $(validate_env)`"\
+		 25 65 3>&1 1>&2 2>&3 )
+	else
+	# Environment ok, call the promptless build.
+	  if ( dialog --backtitle "Tribal Chicken - Build Tool" --title "Confirmation Window" --yesno "Building the ISO may take a while.  \nAre you ready?" 10 55 3>&1 1>&2 2>&3)
+	  then
+	  # Start the build
+	  info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	  "Beginning ISO build." \
+	  5 30 3>&1 1>&2 2>&3 )
+	  sleep .5 #Can safely REMOVE this line to clear the msg
+	  else
+	    clear
+	    exit
+	  fi #if prompt yesno
+	fi #if validate
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	"`echo $(make_img)`" \
+	15 65 3>&1 1>&2 2>&3 )
+	sleep .5   #REMOVE only for display.  If error checking added to make_img, then need change
+	
+	# Prepare the disk image: copy files, run cleanup scripts, etc
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	"Cleaning disk image: Copying user files and running cleanup scripts." \
+	5 30 3>&1 1>&2 2>&3 )
+	( prepare_img )
+	ERR_NO=$?
+	case $ERR_NO in
+	0)
+	     info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	     "PASS!\nNo error msg inside case." \
+	     15 65 3>&1 1>&2 2>&3 )
+	     sleep .75	#REMOVE this and 3 lines above. Case 0 will have no break point.
+	    echo Cleaning disk image.	#So case is not empty.
+	    ;;
+	*)
+	    # Something has failed.  Display error and exit.
+	    source err_msgs
+	    msgval=prepare_img_$ERR_NO
+	    ERR_MSG=${!msgval}
+	    info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --msgbox\
+	    "FAIL!\nError=$ERR_NO\nError msg is:\n$ERR_MSG" \
+	    15 65 3>&1 1>&2 2>&3 )
+	    clear
+	    echo "Problems were encountered."
+	    exit
+	    ;;
+	esac
+	
+	# Prepare and generate the ISO
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	"Preparing ISO, and generating ISO file." \
+	5 30 3>&1 1>&2 2>&3 )
+	( prepare_ISO )
+	ERR_NO=$?
+	case $ERR_NO in
+	0)
+	    #  info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	    #  "PASS!\nNo error msg inside case." \
+	    #  15 65 3>&1 1>&2 2>&3 )
+	    #  sleep .75	#REMOVE this and 3 lines above. Case 0 will have no break point.
+	    echo Preparing ISO image.	#So case is not empty.
+	    ;;
+	*)
+	    # Something has failed.  Display error and exit.
+	    source err_msgs
+	    msgval=prepare_iso_$ERR_NO
+	    ERR_MSG=${!msgval}
+	    info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --msgbox\
+	    "FAIL!\nError=$ERR_NO\nError msg is:\n$ERR_MSG" \
+	    15 65 3>&1 1>&2 2>&3 )
+	    clear
+	    echo "Problems were encountered."
+	    exit
+	    ;;
+	esac
+	
+	# Call archiving (archive function checks flags inside)
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --infobox\
+	"Checking Archive Flags." \
+	5 30 3>&1 1>&2 2>&3 )
+	( archive_img )
+	ERR_NO=$?
+	case $ERR_NO in
+	0)
+	    clear
+	    ;;
+	*)
+	    # Something has failed.  Display error and exit.
+	    source err_msgs
+	    msgval=archive_img_$ERR_NO
+	    ERR_MSG=${!msgval}
+	    info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO" --msgbox\
+	    "FAIL!\nError=$ERR_NO\nError msg is:\n$ERR_MSG" \
+	    15 65 3>&1 1>&2 2>&3 )
+	    clear
+	    echo "Problems were encountered."
+	    exit
+	    ;;
+	esac
+
+	# Display message that we are complete.
+	info_show_answer=$(dialog --backtitle "Tribal Chicken - Build Tool" --title "Build ISO COmpleted" --msgbox\
+	"Success!\nISO generation completed.\nISO file should be: \
+	\n$CURRENT_BUILD_BASE/$CURRENT_DEFAULT_ISO_NAME" \
+	15 65 3>&1 1>&2 2>&3 )
+	;;
+*)
+	# Something went wrong in the menu
+	echo There was an error processing your request to $MENU_CHOICE.
+	echo Program exiting.
+	exit
+	;;
+esac
+
+done # While MAIN_MENU_LOOP
+
+#**********************************************************
+#**********************************************************
+#**********************************************************

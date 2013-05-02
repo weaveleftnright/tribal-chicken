@@ -1,0 +1,9 @@
+#!/bin/bash
+cp getmac /etc/init.d
+# may not have update-rc.d loaded...   
+#   update-rc.d getmac start 2 3 4 5 .
+ln -s /etc/init.d/getmac /etc/rc2.d/S99getmac
+ln -s /etc/init.d/getmac /etc/rc3.d/S99getmac
+ln -s /etc/init.d/getmac /etc/rc4.d/S99getmac
+ln -s /etc/init.d/getmac /etc/rc5.d/S99getmac
+

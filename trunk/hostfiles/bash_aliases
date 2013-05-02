@@ -1,0 +1,21 @@
+# Alias definitions.
+# Should be converted to .bash_aliases
+alias psf='ps -A | grep '
+alias calc='kcalc'
+alias mymac='ifconfig | egrep -o "(..:){5}.."'
+ipv6off ()
+{
+# Converted to function to prevent pgstat error
+  echo 'Shutting down postgres to avoid the pgstat timeout error.'
+    service framework-postgres stop
+  echo -n 'removing IPv6 addresses..'
+    ifconfig eth0 down
+  echo -n '.'
+    ifconfig lo del ::1
+  echo -n '.'
+    ifconfig eth0 up
+  echo '.'
+  echo 'Restarting postgres (needed for metasploit framework)'
+    service framework-postgres start
+  echo 'You will need to re-add your default gateway for connectivity.'
+}

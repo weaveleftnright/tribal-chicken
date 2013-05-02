@@ -1,0 +1,101 @@
+#!/bin/bash
+
+#Function to strip input
+# ****************************************************
+# strip_read_value ( read_value )
+# Usage: 
+# echo -n Enter test string:\>
+# read read_value
+# echo  $(strip_read_value "$read_value")
+# Strips all whitespace front and back, and returns only first word
+# ****************************************************
+strip_read_value ()
+{
+if [ ! $# -eq 0 ]
+then
+	local pattern=" "
+	local RTN_VAL=`echo ${1##$pattern}`
+	local RTN_VAL=`echo ${RTN_VAL%%$pattern}`
+	echo ${RTN_VAL}
+	return 0
+fi
+}
+# ****************************************************
+
+#define some variables:
+LOCAL_MAC_FILE=/root/bin/mac.local 
+DEFAULT_INTERFACE=eth0
+
+#Check for interface input
+if [ -z "$1" ]
+then
+# No parameter, default to eth0
+  DEFAULT_INTERFACE=eth0
+else
+# sent an interface in
+  if [ "$1" = "-d" ]
+  then
+  # requests determiniation via default route
+    echo Determining default routes... 
+    DEF_IFACE="`route | awk '/default/ { print $8 }'`"
+    if [ ! -z $DEF_IFACE ]
+    then
+      DEFAULT_INTERFACE=$DEF_IFACE
+    else
+    # no default route found, default to eth0
+      DEFAULT_INTERFACE=eth0
+    fi
+  else
+  # simply submitted an interface.  Strip input
+    DEFAULT_INTERFACE=$( strip_read_value "$1" )
+  fi
+fi
+
+
+if [ ! -s $LOCAL_MAC_FILE ]
+then
+# original mac.local not found, let's set it now
+  new_mac=`/bin/dmesg | /bin/grep $DEFAULT_INTERFACE | /bin/egrep -o '(..:){5}..'`
+  if [ ! -z "$new_mac" ]
+  then
+  # Found a MAC in dmesg
+    echo $new_mac > $LOCAL_MAC_FILE
+  else
+  # No MAC in dmesg, check the logs in case it scrolled off
+    new_mac=$( strip_read_value `/bin/grep $DEFAULT_INTERFACE /var/log/dmesg* | /bin/egrep -o '(..:){5}..'` )
+    if [ ! -z "$new_mac" ]
+    then
+    # Found a MAC in dmesg logs
+      echo $new_mac > $LOCAL_MAC_FILE
+    else
+    # No MAC in dmesg logs either
+      echo Unable to find MAC address for $DEFAULT_INTERFACE in $LOCAL_MAC_FILE , dmesg , or dmesg logs.
+      exit
+    fi  # if still no new_mac
+  fi  # if ! new_mac
+fi
+
+# Get current MAC
+  CURRENT_MAC=`/sbin/ifconfig |grep $DEFAULT_INTERFACE | awk '/HW/ { print $5 }'` 
+
+# Assign variable to file contents
+DEFAULT_MAC=`cat $LOCAL_MAC_FILE`
+
+#Compare current/default values
+if [ "$CURRENT_MAC" = "$DEFAULT_MAC" ]
+then
+# Current is default
+  echo Current MAC: $CURRENT_MAC matches default MAC: $DEFAULT_MAC
+else
+  echo Attempting to change MAC for $DEFAULT_INTERFACE from: $CURRENT_MAC to: $DEFAULT_MAC
+  # Setting mac to mac.local value
+  if ( ifconfig $DEFAULT_INTERFACE hw ether "$DEFAULT_MAC" )
+  then
+  # ifconfig returned ok
+    echo MAC for $DEFAULT_INTERFACE reassigned as: $DEFAULT_MAC
+  else
+  # ifconfig could not set it
+    echo MAC for $DEFAULT_INTERFACE unable to be reassigned to: $DEFAULT_MAC
+  fi
+fi  # if compare
+

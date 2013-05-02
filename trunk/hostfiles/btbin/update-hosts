@@ -1,0 +1,134 @@
+#!/bin/bash
+# *********************************************************
+# Author: Spiky
+# Last Modified: April 2012
+# This script grabs the newest black hole hosts file from:
+# http://winhelp2002.mvps.org/hosts.txt
+# This should be run when online (or only used when online)
+# *********************************************************
+
+# START Variable Block
+BLACK_HOLE_DIR=/root/bin/.black_hole
+BLACK_HOLE_LOG=wget.log 
+BLACK_HOLE_MD5_LOG=wget_md5.log
+BLACK_HOLE_URL=http://winhelp2002.mvps.org/hosts.txt 
+BLACK_HOLE_HTM=http://winhelp2002.mvps.org/hosts.htm 
+# END Variable Block
+
+# ********************************************************
+# Quick function to attempt restore
+# ********************************************************
+function restore_bak()
+{
+  if [ -e hosts.bak ]
+  then
+    if mv hosts.bak hosts.txt
+    then
+      echo File restored.
+      return 0
+    else
+      echo There was a problem restoring the old file.
+      return 1
+    fi  # if mv (test file rename)
+  else
+    echo Previous hosts file not found!
+    return 1
+  fi  # if hosts.bak
+}
+# ********************************************************
+
+
+# ********************************************************
+# Block for setting up/testing environ
+# ********************************************************
+# Set up to run (change dir, check temp file, etc)
+  echo Preparing environment...
+# Make sure the directory is there
+  if [ ! -d "$BLACK_HOLE_DIR" ]
+  then 
+    mkdir -p "$BLACK_HOLE_DIR"
+  fi
+# Change to destination dir
+  pushd "$BLACK_HOLE_DIR" > /dev/null
+# Store current file in case of errors/mismatches
+  if [ -e hosts.txt ]
+  then
+    cp hosts.txt hosts.bak
+  fi  #if hosts
+
+# ********************************************************
+# Main code block
+# ********************************************************
+# Use wget to pull current file (-N only if newer)
+  echo "Attempting to update the hosts black hole list..."
+  wget -N -o "$BLACK_HOLE_LOG" "$BLACK_HOLE_URL"
+# Make sure it loaded
+  if [ -e hosts.txt ]
+  then
+    if [ ! -z "`grep "hosts\.txt..saved" "$BLACK_HOLE_LOG"`" ]
+    # If saved shows up in the log file, then we got the file
+    then
+      echo New host list saved.
+      # If we've loaded a new file, make sure the MD5 is correct.
+      # Testing MD5
+      echo Retrieving checksum information...
+      # use wget to pull current htm file
+      wget -N -o "$BLACK_HOLE_MD5_LOG" "$BLACK_HOLE_HTM"
+      if [ ! -e hosts.htm ]
+      then
+        echo Could not contact server page to validate new file.  Check manually.
+        echo Output of get command was:
+        cat "$BLACK_HOLE_MD5_LOG"
+        echo Storing new file as hosts.unvalidated
+        mv hosts.txt hosts.unvalidated
+        echo Restoring previous version of hosts.txt
+        restore_bak
+      else
+        LOCAL_MD5="`md5sum hosts.txt | egrep -o "^.{32}"`"
+        BH_TEST_VAL=`egrep -o -i "$LOCAL_MD5" hosts.htm`
+        if [ -z "$BH_TEST_VAL" ]
+        then
+        # MD5 mismatch
+          echo The MD5 value of the downloaded file does not match the website.
+          echo You may need to check the website for changed formatting or problems.
+          echo Reverting to previous list...
+          restore_bak
+        else
+          echo $BH_TEST_VAL matches server version.
+        fi  #if BH_TEST_VAL
+      fi  #if HTM exists
+    else
+      if [ ! -z "`grep "not retrieving" "$BLACK_HOLE_LOG"`" ]
+      # If not retrieving shows up in the log file, then we skipped
+      then
+      # Download skipped due to hosts.txt being same date
+        echo Downloading skipped because server file is not newer.
+      fi  # if not retrieving
+    fi  # if saved
+  else
+  # No hosts.txt AND download NOT skipped due to hosts.txt being same date
+    echo Something went wrong, here was the output of the request.
+    cat "$BLACK_HOLE_LOG"  
+  fi  # if hosts.tx
+
+# ********************************************************
+# Block for tear down/clean up of environ
+# ********************************************************
+  echo Cleaning up...
+
+# Cleanup temp files
+  FILE_LIST=
+  for name in "wget.log" "hosts.htm" "hosts.bak" "wget_md5.log"
+  do
+    if [ -e $name ]
+    then
+      rm -f $name
+    fi
+  done
+
+# return to destination dir
+  popd > /dev/null
+  echo Finished.
+
+exit
+
