@@ -1,7 +1,0 @@
-#!/bin/bash
-#Error messages for reporting
-prepare_img_1="No disk image found."
-prepare_img_2="Problems encountered attempting to mount the image."
-prepare_img_3="Error code 3"
-prepare_img_4="Error code 4"
-
