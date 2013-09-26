@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+############################################
+##  Fix for VMWare Player 6.0.0 -         ##
+##  C headers error			  ##
+##  ------------------------------------  ##
+##                                        ##
+##  Creator: Andrew 'Schlpr0k' Bindner    ##
+##  Last Update: 25-Sep-2013              ##
+############################################
+#
+#
+#
+######################
+#       SCRIPT       #
+######################
+#
+/root/bin/refresh-apt-repository
+apt-get update && apt-get install -y linux-headers-$(uname -r)
+echo
+echo Try it now... 
+#EOF
