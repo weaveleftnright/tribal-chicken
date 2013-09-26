@@ -1,0 +1,66 @@
+#!/bin/bash
+#
+############################################
+##  Swaps current network service         ##
+##  ------------------------------------  ##
+##  Network Manager => Networking         ##
+##  /or/ Networking => Network Manager    ##
+##  Creator: Andrew 'Schlpr0k' Bindner    ##
+##  Last Update: 25-Sep-2013              ##
+############################################
+#
+#
+#
+######################
+#    INT VARIABLES   #
+######################
+BK_FILE=/etc/network/interfaces.bkup
+INT_FILE=/etc/network/interfaces
+######################
+#       SCRIPT       #
+######################
+#
+#Check for backup file
+if [ ! -f $BK_FILE ];
+   then echo "Making backup file "$BK_FILE
+        cp $INT_FILE $BK_FILE
+fi
+#
+#Check for active network service and set variables for swap
+if [ `nmcli nm |grep running |awk '{print $1}'` = "running" ];
+   then 
+	SERVICE1=network-manager
+	SERVICE2=networking
+   else 
+	SERVICE1=networking
+	SERVICE2=network-manager
+fi
+#Echo Active Service
+echo "Detected service: "$SERVICE1
+#
+#Swap SERVICE1 for SERVICE2
+service $SERVICE1 stop 1>/dev/null
+service $SERVICE2 stop 1>/dev/null
+echo "Swapping to service: "$SERVICE2
+if [ "$SERVICE1" = "network-manager" ];
+   then
+	<$BK_FILE sed 's/ dhcp//w $INT_FILE' 1>/dev/null
+   else
+	cp $BK_FILE $INT_FILE
+fi
+#
+#Swap startup files in init.d/rc*.d directories
+SERVICE2_LOC=/etc/init.d/$SERVICE2
+rm -f /etc/rc*.d/*$SERVICE1
+ln -s $SERVICE2_LOC /etc/rc1.d/K02$SERVICE2
+ln -s $SERVICE2_LOC /etc/rc2.d/S18$SERVICE2
+ln -s $SERVICE2_LOC /etc/rc3.d/S18$SERVICE2
+ln -s $SERVICE2_LOC /etc/rc4.d/S18$SERVICE2
+ln -s $SERVICE2_LOC /etc/rc5.d/S18$SERVICE2
+ln -s $SERVICE2_LOC /etc/rc6.d/K02$SERVICE2
+#
+#Restarting new service
+echo " " 
+service $SERVICE2 start
+#
+exit 0;
