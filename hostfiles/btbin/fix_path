@@ -1,0 +1,12 @@
+#!/bin/bash
+#Script checks for the entry of /root/bin in the /root/.bashrc file and 
+#add it's into the file if neccesary.
+
+if grep -Fq "/root/bin" /root/.bashrc; 
+then echo "Bash Path has already been fixed"; 
+else grep -v exec /root/.bashrc > new_bashrc && 
+echo -E 'export PATH=$PATH:/root/bin' >> new_bashrc && 
+mv new_bashrc /root/.bashrc &&
+echo "PATH variable in /root/.bashrc file fixed"; 
+fi
+
