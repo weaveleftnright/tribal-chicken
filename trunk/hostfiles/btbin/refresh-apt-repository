@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+############################################
+##  Refresh APT Repositories              ##
+##  ------------------------------------  ##
+##                                        ##
+##  Creator: Andrew 'Schlpr0k' Bindner    ##
+##  Last Update: 25-Sep-2013              ##
+############################################
+#
+#
+#
+######################
+#    INT VARIABLES   #
+######################
+INT_FILE=/etc/apt/sources.list
+BK_FILE=/etc/apt/sources.list.bkup
+REPO=/root/bin/repo.list
+#
+######################
+#       SCRIPT       #
+######################
+#
+#Check for backup file
+if [ ! -f $BK_FILE ];
+   then echo "Making backup file "$BK_FILE
+        cp $INT_FILE $BK_FILE
+fi
+#Check for new entrys in repo.list and compare it to APT repository
+echo "The following will be added to the APT repository:"
+diff /etc/apt/sources.list repo.list |cut -d " " -f 2-1000 |grep ^deb
+echo 
+echo Transferring...
+diff /etc/apt/sources.list repo.list |cut -d " " -f 2-1000 |grep ^deb >> /etc/apt/sources.list
+echo  ...Complete!
